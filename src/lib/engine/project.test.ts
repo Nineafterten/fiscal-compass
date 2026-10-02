@@ -510,6 +510,31 @@ describe('household price level', () => {
   });
 });
 
+describe('freeze years on growth above CPI', () => {
+  // CPI of 2%, 3% and 1% in the three years after 2026.
+  const cpiIndex = [1, 1.02, 1.02 * 1.03, 1.02 * 1.03 * 1.01];
+  const salary: Income = {
+    id: 'sal',
+    name: 'Salary',
+    type: 'salary',
+    ownerId: 'p1',
+    annualGross: 100_000,
+    realGrowthRate: 0.01,
+  };
+  const factor = (income: Income, year: number) =>
+    incomeGrowthFactor(income, year, 2026, cpiIndex);
+
+  it('compounds inflation and the premium when nothing is frozen', () => {
+    expect(factor(salary, 2029)).toBeCloseTo(cpiIndex[3] * 1.01 ** 3, 12);
+  });
+
+  it('grants neither inflation nor the premium in a frozen year', () => {
+    const frozen = { ...salary, freezeYears: [2027] };
+    expect(factor(frozen, 2027)).toBeCloseTo(1, 12);
+    expect(factor(frozen, 2029)).toBeCloseTo(1.03 * 1.01 * 1.01 * 1.01, 12);
+  });
+});
+
 describe('raise caps', () => {
   const salary: Income = {
     id: 'sal',
@@ -521,8 +546,9 @@ describe('raise caps', () => {
     nominalGrowthRate: 0.04,
   };
   const caps = [0.01, 0.01, 0.01];
+  const noInflation = Array.from({ length: 10 }, () => 1);
   const factor = (income: Income, year: number) =>
-    incomeGrowthFactor(income, year, 2026, 1, year - 2026, caps);
+    incomeGrowthFactor(income, year, 2026, noInflation, caps);
 
   it('limits raises in the capped years, then resumes them from the lower base', () => {
     expect(factor(salary, 2028)).toBeCloseTo(1.01 ** 2, 12);

@@ -93,26 +93,36 @@ function grow(startBalance: number, flow: number, rate: number): number {
 /**
  * How much an income has grown by `year`, as a multiple of its starting value.
  *
- * Nominal growth compounds only in years that actually granted a raise, so a
- * freeze doesn't merely pause income — it leaves every later year permanently
- * a step behind, which is what a skipped cost-of-living adjustment really does.
+ * Growth compounds only in years that actually granted a raise, so a freeze
+ * doesn't merely pause income — it leaves every later year permanently a step
+ * behind, which is what a skipped cost-of-living adjustment really does.
+ * `cpiIndex` is official inflation compounded to each year, 1 at `startYear`.
  */
 export function incomeGrowthFactor(
   income: Income,
   year: number,
   startYear: number,
-  cumulativeInflation: number,
-  t: number,
+  cpiIndex: readonly number[],
   raiseCaps?: number[],
 ): number {
+  const t = year - startYear;
+  const frozen = new Set(income.freezeYears ?? []);
+
   if (income.nominalGrowthRate === undefined) {
     // Legacy path: growth expressed as a real premium over official inflation.
-    return cumulativeInflation * Math.pow(1 + income.realGrowthRate, t);
+    // A frozen year grants neither that year's inflation nor the premium.
+    let factor = cpiIndex[t] * Math.pow(1 + income.realGrowthRate, t);
+    for (const y of frozen) {
+      const s = y - startYear;
+      if (s >= 1 && s <= t) {
+        factor /= (cpiIndex[s] / cpiIndex[s - 1]) * (1 + income.realGrowthRate);
+      }
+    }
+    return factor;
   }
 
   const growth = income.nominalGrowthRate;
   const caps = income.type === 'salary' ? raiseCaps : undefined;
-  const frozen = new Set(income.freezeYears ?? []);
   let raises = 0;
   let cappedFactor = 1;
   for (let y = startYear + 1; y <= year; y++) {
@@ -166,6 +176,7 @@ export function project(plan: Plan, options: ProjectionOptions = {}): Projection
   const householdRate = a.householdInflation ?? a.inflation;
   let cumulativeInflation = 1;
   let cumulativeHousehold = 1;
+  const cpiIndex: number[] = [];
 
   for (let year = plan.startYear; year <= endYear; year++) {
     const t = year - plan.startYear;
@@ -176,6 +187,7 @@ export function project(plan: Plan, options: ProjectionOptions = {}): Projection
       // preserving whatever gap the plan assumes between the two.
       cumulativeHousehold *= 1 + yearInflation + (householdRate - a.inflation);
     }
+    cpiIndex.push(cumulativeInflation);
 
     const table = taxTableFor(year, a.inflation);
     const shock = options.marketShocks?.[t];
@@ -215,7 +227,7 @@ export function project(plan: Plan, options: ProjectionOptions = {}): Projection
 
       const amount =
         inc.annualGross *
-        incomeGrowthFactor(inc, year, plan.startYear, cumulativeInflation, t, options.raiseCaps);
+        incomeGrowthFactor(inc, year, plan.startYear, cpiIndex, options.raiseCaps);
 
       if (inc.type === 'salary') earnedIncome += amount;
       else if (inc.type === 'self_employment') selfEmploymentIncome += amount;
@@ -370,7 +382,7 @@ export function project(plan: Plan, options: ProjectionOptions = {}): Projection
             (s, i) =>
               s +
               i.annualGross *
-                incomeGrowthFactor(i, year, plan.startYear, cumulativeInflation, t, options.raiseCaps),
+                incomeGrowthFactor(i, year, plan.startYear, cpiIndex, options.raiseCaps),
             0,
           );
 

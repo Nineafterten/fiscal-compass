@@ -64,6 +64,21 @@ describe('stagflation', () => {
   });
 });
 
+describe('a year out of work', () => {
+  it('leaves pay two raises behind once work resumes', () => {
+    // Both sample salaries grow 1% above CPI, the path that used to ignore freezes.
+    const { plan, options } = scenario('job-loss').build(SAMPLE_PLAN);
+    const resumed = (options.jobLossYears?.[0] ?? 0) + 2;
+    const payIn = (rows: ReturnType<typeof project>['rows']) =>
+      rows.find((r) => r.year === resumed)?.earnedIncome ?? 0;
+    const raise = (1 + SAMPLE_PLAN.assumptions.inflation) * 1.01;
+    expect(payIn(project(plan, options).rows)).toBeCloseTo(
+      payIn(project(SAMPLE_PLAN).rows) / raise ** 2,
+      2,
+    );
+  });
+});
+
 describe('stress comparison', () => {
   it("reports the final net worth in today's dollars", () => {
     const plan = withInflation(0.025);
