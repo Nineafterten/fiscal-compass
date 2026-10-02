@@ -88,6 +88,55 @@ const pct = (n: number, digits = 0) => `${(n * 100).toFixed(digits)}%`;
 // ---------------------------------------------------------------------------
 
 /**
+ * When disability benefits would begin, and how many days nothing pays first.
+ *
+ * Short-term cover bridges to long-term cover only if it is still paying when
+ * the soonest long-term policy begins, and an unrecorded benefit period is not
+ * counted on. Otherwise there are two unpaid windows: before it and after.
+ */
+interface DisabilityTimeline {
+  /** Days with no benefit before long-term cover begins. */
+  unpaidDays: number;
+  /** Day the soonest long-term policy begins paying. */
+  longStarts?: number;
+  /** Short-term cover that begins before long-term cover does. */
+  shortTerm?: {
+    starts: number;
+    /** Day it stops paying; undefined when the benefit period isn't recorded. */
+    ends?: number;
+    bridges: boolean;
+  };
+}
+
+function disabilityTimeline(plan: Plan): DisabilityTimeline | undefined {
+  const soonest = (policies: Plan['insurance']) =>
+    policies
+      .filter((p) => p.type === 'disability' && p.eliminationPeriodDays !== undefined)
+      .sort((a, b) => (a.eliminationPeriodDays ?? 0) - (b.eliminationPeriodDays ?? 0))[0];
+
+  const short = soonest(plan.insurance.filter((p) => p.disabilityTerm === 'short'));
+  const shortStarts = short?.eliminationPeriodDays;
+  const longStarts = soonest(plan.insurance.filter((p) => p.disabilityTerm !== 'short'))
+    ?.eliminationPeriodDays;
+  if (shortStarts === undefined && longStarts === undefined) return undefined;
+
+  if (shortStarts === undefined || longStarts === undefined || shortStarts >= longStarts) {
+    return { unpaidDays: Math.min(shortStarts ?? Infinity, longStarts ?? Infinity), longStarts };
+  }
+
+  const ends =
+    short?.benefitPeriodWeeks !== undefined
+      ? shortStarts + short.benefitPeriodWeeks * 7
+      : undefined;
+  const bridges = ends !== undefined && ends >= longStarts;
+  return {
+    unpaidDays: bridges ? shortStarts : shortStarts + longStarts - (ends ?? shortStarts),
+    longStarts,
+    shortTerm: { starts: shortStarts, ends, bridges },
+  };
+}
+
+/**
  * The emergency fund. Usually the highest-severity finding in a plan that is
  * otherwise doing well, because retirement projections are insensitive to it
  * while real life is not.
@@ -103,15 +152,16 @@ const emergencyFund: InsightRule = ({ plan, metrics }) => {
 
   // A disability elimination period is a hard, contractual floor on how much
   // cash is required — more concrete than any rule of thumb, because it is a
-  // window during which no benefit arrives at all. The floor is the SOONEST
-  // any policy starts paying (the minimum elimination period), since a
-  // short-term policy bridges the gap before long-term coverage begins.
-  // Taking the maximum instead would badly overstate the requirement.
-  const disabilityElims = plan.insurance
-    .filter((i) => i.type === 'disability' && i.eliminationPeriodDays !== undefined)
-    .map((i) => i.eliminationPeriodDays as number);
-  const eliminationDays = disabilityElims.length ? Math.min(...disabilityElims) : 0;
-  const eliminationMonths = eliminationDays / 30;
+  // window during which no benefit arrives at all.
+  const disability = disabilityTimeline(plan);
+  const unpaidDays = disability?.unpaidDays ?? 0;
+  const unpaidCash = money((monthly * unpaidDays) / 30);
+  const hole = disability?.shortTerm?.bridges === false ? disability.shortTerm : undefined;
+  const disabilityAction = !hole
+    ? `Your disability policy pays nothing for its first ${unpaidDays} days, which turns the usual rule of thumb into a contractual requirement: about ${unpaidCash} just to bridge to the first benefit cheque.`
+    : hole.ends !== undefined
+      ? `Your disability cover pays nothing for ${unpaidDays} days in all — the first ${hole.starts}, and ${unpaidDays - hole.starts} between short-term cover ending and long-term cover starting — which turns the usual rule of thumb into a contractual requirement: about ${unpaidCash} to bridge them.`
+      : `Short-term disability cover starts after ${hole.starts} days, but its benefit period is not recorded, so it cannot be counted on to last until long-term cover begins on day ${unpaidDays}. Counting all ${unpaidDays} days turns the usual rule of thumb into a contractual requirement: about ${unpaidCash}.`;
 
   const severity: InsightSeverity =
     months >= target ? 'ok' : months >= 3 ? 'warning' : 'critical';
@@ -149,12 +199,16 @@ const emergencyFund: InsightRule = ({ plan, metrics }) => {
       { label: 'Monthly spending', value: money(monthly) },
       { label: 'Months covered', value: months.toFixed(2), benchmark: `${target} target` },
       { label: `Gap to ${target} months`, value: money(gapToTarget) },
-      ...(eliminationDays > 0
+      ...(unpaidDays > 0
         ? [
             {
-              label: 'Disability pays nothing for',
-              value: `${eliminationDays} days`,
-              benchmark: `${money(monthly * eliminationMonths)} of cash`,
+              label: !hole
+                ? 'Disability pays nothing for'
+                : hole.ends !== undefined
+                  ? 'Days with no disability benefit'
+                  : 'Disability counted as unpaid',
+              value: `${unpaidDays} days`,
+              benchmark: `${unpaidCash} of cash`,
             },
           ]
         : []),
@@ -162,8 +216,8 @@ const emergencyFund: InsightRule = ({ plan, metrics }) => {
     action:
       severity === 'ok'
         ? undefined
-        : eliminationDays > 0
-          ? `Your disability policy pays nothing for its first ${eliminationDays} days, which turns the usual rule of thumb into a contractual requirement: about ${money(monthly * eliminationMonths)} just to bridge to the first benefit cheque.`
+        : unpaidDays > 0
+          ? disabilityAction
           : `Reaching ${milestone === target ? `the ${target}-month target` : 'three months'} needs about ${money(Math.max(0, monthly * milestone - metrics.liquidAssets))}.`,
   };
 };
@@ -891,7 +945,6 @@ const disabilityAdequacy: InsightRule = ({ plan, metrics }) => {
   // built from long-term policies only. Short-term cover matters for the
   // emergency-fund gap (handled in that rule) but would badly overstate the
   // lasting income if counted here.
-  const shortTerm = allDisability.filter((p) => p.disabilityTerm === 'short');
   const policies = allDisability.filter((p) => p.disabilityTerm !== 'short');
   if (!policies.length) return null;
 
@@ -964,30 +1017,14 @@ const disabilityAdequacy: InsightRule = ({ plan, metrics }) => {
   const currentTakeHome = salary - currentTax - pretaxDeferrals;
   const netReplacement = currentTakeHome > 0 ? netOnClaim / currentTakeHome : 0;
 
-  // A short-term policy bridges to long-term cover only if it is still paying
-  // when the long-term elimination period ends, and an unrecorded benefit period
-  // is not counted on. Otherwise there are two unpaid windows: before it and after.
-  const longElim = detailed?.eliminationPeriodDays;
-  const firstShort = shortTerm
-    .filter((p) => p.eliminationPeriodDays !== undefined)
-    .sort((a, b) => (a.eliminationPeriodDays ?? 0) - (b.eliminationPeriodDays ?? 0))[0];
-  const shortElim = firstShort?.eliminationPeriodDays;
-  const shortEnds =
-    shortElim !== undefined && firstShort?.benefitPeriodWeeks !== undefined
-      ? shortElim + firstShort.benefitPeriodWeeks * 7
-      : undefined;
-  const effectiveElim = Math.min(
-    longElim ?? Infinity,
-    shortElim ?? Infinity,
-  );
-  const elimination = Number.isFinite(effectiveElim) ? effectiveElim : undefined;
-  const stdPaysFirst = shortElim !== undefined && longElim !== undefined && shortElim < longElim;
-  const stdBridges = stdPaysFirst && shortEnds !== undefined && shortEnds >= longElim;
-  const unpaidDays =
-    stdPaysFirst && !stdBridges ? shortElim + longElim - (shortEnds ?? shortElim) : elimination;
-  const monthsUncovered = unpaidDays ? unpaidDays / 30 : 0;
+  const timeline = disabilityTimeline(plan);
+  const longElim = timeline?.longStarts;
+  const std = timeline?.shortTerm;
+  const stdBridges = std?.bridges ?? false;
+  const unpaidDays = timeline?.unpaidDays ?? 0;
+  const monthsUncovered = unpaidDays / 30;
   const cashNeeded = monthsUncovered * monthlySpending;
-  const eliminationGap = unpaidDays !== undefined && metrics.emergencyFundMonths < monthsUncovered;
+  const eliminationGap = unpaidDays > 0 && metrics.emergencyFundMonths < monthsUncovered;
 
   const metrics_: InsightMetric[] = [
     {
@@ -1033,9 +1070,9 @@ const disabilityAdequacy: InsightRule = ({ plan, metrics }) => {
   if (unpaidDays) {
     metrics_.push({
       label:
-        !stdPaysFirst || stdBridges
+        !std || std.bridges
           ? 'Nothing pays for'
-          : shortEnds !== undefined
+          : std.ends !== undefined
             ? 'Days with no benefit'
             : 'Counted as unpaid',
       value: `${unpaidDays} days`,
@@ -1076,19 +1113,19 @@ const disabilityAdequacy: InsightRule = ({ plan, metrics }) => {
       `Cover is own-occupation for ${detailed.ownOccupationMonths} months and then switches to *any gainful occupation you are reasonably fitted for* — a far harder test to keep meeting, and the point at which many long claims end.`,
     );
   }
-  if (stdBridges && elimination) {
+  if (std?.bridges) {
     parts.push(
-      `On timing, the pieces fit together better than they first look: short-term cover starts after ${elimination} days and runs until the long-term policy begins around day ${longElim}, so the true no-income window is ${elimination} days rather than ${longElim}. That still needs roughly ${money(cashNeeded)} in cash — the one place this connects to the emergency fund — but it is a ${elimination}-day gap, not a ${longElim}-day one.`,
+      `On timing, the pieces fit together better than they first look: short-term cover starts after ${std.starts} days and runs until the long-term policy begins around day ${longElim}, so the true no-income window is ${std.starts} days rather than ${longElim}. That still needs roughly ${money(cashNeeded)} in cash — the one place this connects to the emergency fund — but it is a ${std.starts}-day gap, not a ${longElim}-day one.`,
     );
-  } else if (stdPaysFirst && unpaidDays) {
+  } else if (std) {
     parts.push(
-      shortEnds !== undefined
-        ? `On timing, there is a hole between the two policies: short-term cover starts after ${shortElim} days but stops around day ${shortEnds}, and the long-term policy does not begin until around day ${longElim}. That leaves ${unpaidDays} days with no benefit — the first ${shortElim} and another ${longElim - shortEnds} between the two — and bridging them needs roughly ${money(cashNeeded)} in cash against the ${metrics.emergencyFundMonths.toFixed(1)} months currently held.`
-        : `Short-term cover starts after ${shortElim} days, but its benefit period is not recorded, so it cannot be counted on to last until the long-term policy begins around day ${longElim}. Counting the full ${longElim} days, bridging needs roughly ${money(cashNeeded)} in cash against the ${metrics.emergencyFundMonths.toFixed(1)} months currently held.`,
+      std.ends !== undefined
+        ? `On timing, there is a hole between the two policies: short-term cover starts after ${std.starts} days but stops around day ${std.ends}, and the long-term policy does not begin until around day ${longElim}. That leaves ${unpaidDays} days with no benefit — the first ${std.starts} and another ${unpaidDays - std.starts} between the two — and bridging them needs roughly ${money(cashNeeded)} in cash against the ${metrics.emergencyFundMonths.toFixed(1)} months currently held.`
+        : `Short-term cover starts after ${std.starts} days, but its benefit period is not recorded, so it cannot be counted on to last until the long-term policy begins around day ${longElim}. Counting the full ${longElim} days, bridging needs roughly ${money(cashNeeded)} in cash against the ${metrics.emergencyFundMonths.toFixed(1)} months currently held.`,
     );
-  } else if (eliminationGap && elimination) {
+  } else if (eliminationGap) {
     parts.push(
-      `The ${elimination}-day elimination period is where this meets the emergency fund: nothing arrives for that whole window, and bridging it needs roughly ${money(cashNeeded)} in cash against the ${metrics.emergencyFundMonths.toFixed(1)} months currently held.`,
+      `The ${unpaidDays}-day elimination period is where this meets the emergency fund: nothing arrives for that whole window, and bridging it needs roughly ${money(cashNeeded)} in cash against the ${metrics.emergencyFundMonths.toFixed(1)} months currently held.`,
     );
   }
 

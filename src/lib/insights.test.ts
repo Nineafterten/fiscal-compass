@@ -258,6 +258,31 @@ describe('disability adequacy', () => {
     expect(short?.body).not.toContain('runs until the long-term policy begins');
   });
 
+  it('agrees with the emergency-fund card on how long nothing pays', () => {
+    // The last case has two long-term policies, and the individual one pays first.
+    const individual: Plan['insurance'][number] = {
+      id: 'idi', name: 'Individual LTD', type: 'disability', disabilityTerm: 'long',
+      coverageAmount: 24_000, insuredPersonId: 'p1', monthlyPremium: 0,
+      benefitTaxable: false, eliminationPeriodDays: 90,
+    };
+    const cases: [Plan['insurance'], string][] = [
+      [[std(26), ltd], '7 days'],
+      [[std(13), ltd], '89 days'],
+      [[std(), ltd], '180 days'],
+      [[{ ...ltd, ownOccupationMonths: 24 }, individual], '90 days'],
+    ];
+    const cardLabels = ['Nothing pays for', 'Days with no benefit', 'Counted as unpaid'];
+    for (const [policies, days] of cases) {
+      const plan = withDisability(policies);
+      const fund = findById(plan, 'emergency-fund')?.metrics.find((m) => /disability/i.test(m.label));
+      const card = findById(plan, 'disability-adequacy')?.metrics.find((m) =>
+        cardLabels.includes(m.label),
+      );
+      expect(fund?.value).toBe(days);
+      expect(card?.value).toBe(days);
+    }
+  });
+
   it('does not count on a short-term benefit period that is not recorded', () => {
     const insight = findById(withDisability([std(), ltd]), 'disability-adequacy');
     expect(insight?.metrics.find((m) => m.label === 'Counted as unpaid')?.value).toBe('180 days');
