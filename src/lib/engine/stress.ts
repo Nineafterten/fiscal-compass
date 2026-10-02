@@ -126,16 +126,24 @@ export const STRESS_SCENARIOS: StressScenario[] = [
   {
     id: 'basket-outruns-cpi',
     name: 'Your basket keeps outrunning CPI',
-    description: 'Household costs rise 5.5% a year while the tax code indexes at official CPI.',
+    description:
+      'Household costs rise 5.5% a year, or three points above official CPI if that is higher, while the tax code indexes at CPI.',
     rationale:
       'Headline CPI is a national average across all households; a family with a mortgage escrow, a commute, insurance and a teenager rarely matches it. Because tax brackets and contribution limits are indexed to the official figure, a persistent gap erodes spending power and tax treatment at the same time. Over a long plan it is often the most sensitive assumption of all — more so than raises, returns or retirement age.',
-    build: (plan) => ({
-      plan: {
-        ...plan,
-        assumptions: { ...plan.assumptions, householdInflation: 0.055 },
-      },
-      options: {},
-    }),
+    build: (plan) => {
+      const { inflation, householdInflation } = plan.assumptions;
+      return {
+        plan: {
+          ...plan,
+          assumptions: {
+            ...plan.assumptions,
+            // Never below the plan's own basket rate, or the stress becomes a relief.
+            householdInflation: Math.max(0.055, inflation + 0.03, householdInflation ?? inflation),
+          },
+        },
+        options: {},
+      };
+    },
   },
   {
     id: 'wage-stagnation',

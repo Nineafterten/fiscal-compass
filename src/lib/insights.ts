@@ -116,6 +116,12 @@ const emergencyFund: InsightRule = ({ plan, metrics }) => {
   const severity: InsightSeverity =
     months >= target ? 'ok' : months >= 3 ? 'warning' : 'critical';
 
+  const gapToTarget = Math.max(0, monthly * target - metrics.liquidAssets);
+  const investedElsewhere = plan.accounts
+    .filter((a) => !isLiquid(a.type) && taxBucketOf(a.type) !== 'tax_free_edu')
+    .reduce((s, a) => s + a.balance, 0);
+  const milestone = months < 3 ? Math.min(3, target) : target;
+
   return {
     id: 'emergency-fund',
     severity,
@@ -133,15 +139,16 @@ const emergencyFund: InsightRule = ({ plan, metrics }) => {
             singleEarner
               ? ' On a single income the usual guidance is the top of the range rather than the bottom, because there is no second paycheck to absorb a gap.'
               : ''
-          } This does not show up in the retirement projection at all — the portfolio is large enough that a bad month gets absorbed on paper. In practice it would be absorbed by a credit card.`,
+          }${
+            investedElsewhere >= gapToTarget
+              ? ' This does not show up in the retirement projection at all — the portfolio is large enough that a bad month gets absorbed on paper. In practice it would be absorbed by a credit card.'
+              : ''
+          }`,
     metrics: [
       { label: 'Liquid savings', value: money(metrics.liquidAssets) },
       { label: 'Monthly spending', value: money(monthly) },
       { label: 'Months covered', value: months.toFixed(2), benchmark: `${target} target` },
-      {
-        label: `Gap to ${target} months`,
-        value: money(Math.max(0, monthly * target - metrics.liquidAssets)),
-      },
+      { label: `Gap to ${target} months`, value: money(gapToTarget) },
       ...(eliminationDays > 0
         ? [
             {
@@ -156,8 +163,8 @@ const emergencyFund: InsightRule = ({ plan, metrics }) => {
       severity === 'ok'
         ? undefined
         : eliminationDays > 0
-          ? `Your disability policy pays nothing for its first ${eliminationDays} days, which turns the usual rule of thumb into a contractual requirement: about ${money(monthly * eliminationMonths)} just to bridge to the first benefit cheque. Every other finding on this page is smaller than this one.`
-          : `Reaching three months needs about ${money(Math.max(0, monthly * 3 - metrics.liquidAssets))}. Every other finding here is smaller than this one.`,
+          ? `Your disability policy pays nothing for its first ${eliminationDays} days, which turns the usual rule of thumb into a contractual requirement: about ${money(monthly * eliminationMonths)} just to bridge to the first benefit cheque.`
+          : `Reaching ${milestone === target ? `the ${target}-month target` : 'three months'} needs about ${money(Math.max(0, monthly * milestone - metrics.liquidAssets))}.`,
   };
 };
 
@@ -957,22 +964,30 @@ const disabilityAdequacy: InsightRule = ({ plan, metrics }) => {
   const currentTakeHome = salary - currentTax - pretaxDeferrals;
   const netReplacement = currentTakeHome > 0 ? netOnClaim / currentTakeHome : 0;
 
-  // The true no-income window is the SOONEST any policy pays — a short-term
-  // policy bridges the long-term elimination period. The long-term figure on
-  // its own overstates the cash requirement several-fold.
+  // A short-term policy bridges to long-term cover only if it is still paying
+  // when the long-term elimination period ends, and an unrecorded benefit period
+  // is not counted on. Otherwise there are two unpaid windows: before it and after.
   const longElim = detailed?.eliminationPeriodDays;
-  const shortElim = shortTerm.length
-    ? Math.min(...shortTerm.map((p) => p.eliminationPeriodDays ?? Infinity))
-    : undefined;
+  const firstShort = shortTerm
+    .filter((p) => p.eliminationPeriodDays !== undefined)
+    .sort((a, b) => (a.eliminationPeriodDays ?? 0) - (b.eliminationPeriodDays ?? 0))[0];
+  const shortElim = firstShort?.eliminationPeriodDays;
+  const shortEnds =
+    shortElim !== undefined && firstShort?.benefitPeriodWeeks !== undefined
+      ? shortElim + firstShort.benefitPeriodWeeks * 7
+      : undefined;
   const effectiveElim = Math.min(
     longElim ?? Infinity,
     shortElim ?? Infinity,
   );
   const elimination = Number.isFinite(effectiveElim) ? effectiveElim : undefined;
-  const monthsUncovered = elimination ? elimination / 30 : 0;
+  const stdPaysFirst = shortElim !== undefined && longElim !== undefined && shortElim < longElim;
+  const stdBridges = stdPaysFirst && shortEnds !== undefined && shortEnds >= longElim;
+  const unpaidDays =
+    stdPaysFirst && !stdBridges ? shortElim + longElim - (shortEnds ?? shortElim) : elimination;
+  const monthsUncovered = unpaidDays ? unpaidDays / 30 : 0;
   const cashNeeded = monthsUncovered * monthlySpending;
-  const eliminationGap = elimination !== undefined && metrics.emergencyFundMonths < monthsUncovered;
-  const stdBridges = shortElim !== undefined && longElim !== undefined && shortElim < longElim;
+  const eliminationGap = unpaidDays !== undefined && metrics.emergencyFundMonths < monthsUncovered;
 
   const metrics_: InsightMetric[] = [
     {
@@ -1015,10 +1030,15 @@ const disabilityAdequacy: InsightRule = ({ plan, metrics }) => {
       benchmark: 'then any gainful occupation',
     });
   }
-  if (elimination) {
+  if (unpaidDays) {
     metrics_.push({
-      label: 'Nothing pays for',
-      value: `${elimination} days`,
+      label:
+        !stdPaysFirst || stdBridges
+          ? 'Nothing pays for'
+          : shortEnds !== undefined
+            ? 'Days with no benefit'
+            : 'Counted as unpaid',
+      value: `${unpaidDays} days`,
       benchmark: stdBridges
         ? `short-term cover then bridges to day ${longElim}`
         : `${money(cashNeeded)} of cash needed`,
@@ -1060,15 +1080,24 @@ const disabilityAdequacy: InsightRule = ({ plan, metrics }) => {
     parts.push(
       `On timing, the pieces fit together better than they first look: short-term cover starts after ${elimination} days and runs until the long-term policy begins around day ${longElim}, so the true no-income window is ${elimination} days rather than ${longElim}. That still needs roughly ${money(cashNeeded)} in cash — the one place this connects to the emergency fund — but it is a ${elimination}-day gap, not a ${longElim}-day one.`,
     );
+  } else if (stdPaysFirst && unpaidDays) {
+    parts.push(
+      shortEnds !== undefined
+        ? `On timing, there is a hole between the two policies: short-term cover starts after ${shortElim} days but stops around day ${shortEnds}, and the long-term policy does not begin until around day ${longElim}. That leaves ${unpaidDays} days with no benefit — the first ${shortElim} and another ${longElim - shortEnds} between the two — and bridging them needs roughly ${money(cashNeeded)} in cash against the ${metrics.emergencyFundMonths.toFixed(1)} months currently held.`
+        : `Short-term cover starts after ${shortElim} days, but its benefit period is not recorded, so it cannot be counted on to last until the long-term policy begins around day ${longElim}. Counting the full ${longElim} days, bridging needs roughly ${money(cashNeeded)} in cash against the ${metrics.emergencyFundMonths.toFixed(1)} months currently held.`,
+    );
   } else if (eliminationGap && elimination) {
     parts.push(
       `The ${elimination}-day elimination period is where this meets the emergency fund: nothing arrives for that whole window, and bridging it needs roughly ${money(cashNeeded)} in cash against the ${metrics.emergencyFundMonths.toFixed(1)} months currently held.`,
     );
   }
 
+  const severity: InsightSeverity =
+    eliminationGap && !stdBridges ? 'warning' : capBinds && singleEarner ? 'warning' : 'opportunity';
+
   return {
     id: 'disability-adequacy',
-    severity: eliminationGap && !stdBridges ? 'warning' : capBinds && singleEarner ? 'warning' : 'opportunity',
+    severity,
     priority: 12,
     title:
       capBinds && singleEarner
@@ -1081,7 +1110,7 @@ const disabilityAdequacy: InsightRule = ({ plan, metrics }) => {
     action: unknowns.length
       ? `Still to confirm on the individually-owned policy: ${unknowns.map((p) => p.name).join(', ')} — specifically its own-occupation definition, which individual policies usually have but the paperwork should state.`
       : capBinds && cappedPolicy?.monthlyBenefitCap
-        ? `Nothing urgent. The one thing to keep an eye on: the ${money(cappedPolicy.monthlyBenefitCap)}/mo cap does not index, so each raise lowers the share of income it replaces. Worth revisiting the cover after a significant raise.`
+        ? `${severity === 'opportunity' && !eliminationGap ? 'Nothing urgent. ' : ''}The ${money(cappedPolicy.monthlyBenefitCap)}/mo cap does not index, so each raise lowers the share of income it replaces. Worth revisiting the cover after a significant raise.`
         : undefined,
   };
 };

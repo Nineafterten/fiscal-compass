@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { SAMPLE_PLAN } from '../data/profiles/sample';
+import { taxTableFor } from '../data/taxTables';
 import { project } from './engine/project';
 import { computeMetrics } from './engine/solve';
+import { formatCurrency } from './format';
 import { generateInsights, type InsightContext } from './insights';
-import type { Plan } from '../types/plan';
+import { isLiquid, type Plan } from '../types/plan';
 
 /** Tests run against the committed sample so they don't depend on private data. */
 function contextFor(plan: Plan): InsightContext {
@@ -85,6 +87,24 @@ describe('emergency fund rule', () => {
     const gap = insight?.metrics.find((m) => m.label.startsWith('Gap'));
     expect(gap).toBeDefined();
     expect(gap?.value).toMatch(/\$/);
+  });
+
+  it('points at the target, not three months, once three months are covered', () => {
+    const insight = findById(withLiquid(30_000), 'emergency-fund');
+    const gap = insight?.metrics.find((m) => m.label.startsWith('Gap'));
+    expect(insight?.action).toContain(
+      `the ${SAMPLE_PLAN.assumptions.emergencyFundMonths}-month target needs about ${gap?.value}`,
+    );
+    expect(findById(withLiquid(2_000), 'emergency-fund')?.action).toMatch(/^Reaching three months/);
+  });
+
+  it('only says the portfolio absorbs a bad month when there is a portfolio to absorb it', () => {
+    const cashOnly: Plan = {
+      ...withLiquid(2_000),
+      accounts: withLiquid(2_000).accounts.map((a) => (isLiquid(a.type) ? a : { ...a, balance: 0 })),
+    };
+    expect(findById(withLiquid(2_000), 'emergency-fund')?.body).toContain('absorbed on paper');
+    expect(findById(cashOnly, 'emergency-fund')?.body).not.toContain('absorbed on paper');
   });
 });
 
@@ -193,7 +213,7 @@ describe('disability adequacy', () => {
   });
 
   it('excludes short-term cover from the long-term replacement figure', () => {
-    // 60% STD + 60% LTD must not read as 120% replacement.
+    // The STD pays as much as the LTD, so counting it would double the figure.
     const plan = withDisability([
       {
         id: 'std', name: 'STD', type: 'disability', disabilityTerm: 'short',
@@ -206,14 +226,58 @@ describe('disability adequacy', () => {
         benefitTaxable: true, eliminationPeriodDays: 180, monthlyBenefitCap: 7_500,
       },
     ]);
+    const salary = SAMPLE_PLAN.incomes
+      .filter((i) => i.type === 'salary')
+      .reduce((s, i) => s + i.annualGross, 0);
     const insight = findById(plan, 'disability-adequacy');
     const gross = insight?.metrics.find((m) => m.label.includes('replacement'));
-    // The LTD alone; counting the STD too would roughly double this. Whatever
-    // the exact percentage, it must be under 100% — the bug being guarded
-    // against produced an impossible figure above it.
-    const value = Number.parseInt(gross?.value ?? '0', 10);
-    expect(value).toBeGreaterThan(0);
-    expect(value).toBeLessThan(100);
+    expect(gross?.benchmark).toBe(`${formatCurrency(90_000)}/yr of ${formatCurrency(salary)}`);
+    expect(gross?.value).toBe(`${Math.round((90_000 / salary) * 100)}%`);
+  });
+
+  const std = (benefitPeriodWeeks?: number): Plan['insurance'][number] => ({
+    id: 'std', name: 'STD', type: 'disability', disabilityTerm: 'short',
+    coverageAmount: 90_000, insuredPersonId: 'p1', monthlyPremium: 0,
+    benefitTaxable: true, eliminationPeriodDays: 7, benefitPeriodWeeks,
+  });
+  const ltd: Plan['insurance'][number] = {
+    id: 'ltd', name: 'LTD', type: 'disability', disabilityTerm: 'long',
+    coverageAmount: 90_000, insuredPersonId: 'p1', monthlyPremium: 0,
+    benefitTaxable: true, eliminationPeriodDays: 180, monthlyBenefitCap: 7_500,
+  };
+
+  it('bridges only when short-term cover lasts until long-term cover starts', () => {
+    // 26 weeks from day 7 reaches day 189, past the LTD's day 180. 13 weeks
+    // stops at day 98, leaving the first 7 days and days 98-180 unpaid.
+    const bridged = findById(withDisability([std(26), ltd]), 'disability-adequacy');
+    expect(bridged?.metrics.find((m) => m.label === 'Nothing pays for')?.value).toBe('7 days');
+    expect(bridged?.body).toContain('runs until the long-term policy begins');
+
+    const short = findById(withDisability([std(13), ltd]), 'disability-adequacy');
+    expect(short?.metrics.find((m) => m.label === 'Days with no benefit')?.value).toBe('89 days');
+    expect(short?.body).not.toContain('runs until the long-term policy begins');
+  });
+
+  it('does not count on a short-term benefit period that is not recorded', () => {
+    const insight = findById(withDisability([std(), ltd]), 'disability-adequacy');
+    expect(insight?.metrics.find((m) => m.label === 'Counted as unpaid')?.value).toBe('180 days');
+    expect(insight?.body).toContain('benefit period is not recorded');
+  });
+
+  it('does not call a warning "nothing urgent"', () => {
+    // Two earners and a bridged gap: the cap is the only thing to watch.
+    const calm = findById(withDisability([std(26), ltd]), 'disability-adequacy');
+    expect(calm?.severity).toBe('opportunity');
+    expect(calm?.action).toMatch(/^Nothing urgent\. /);
+
+    const oneEarner: Plan = {
+      ...withDisability([ltd]),
+      incomes: SAMPLE_PLAN.incomes.filter((i) => i.ownerId === 'p1'),
+    };
+    const warning = findById(oneEarner, 'disability-adequacy');
+    expect(warning?.severity).toBe('warning');
+    expect(warning?.action).toMatch(/cap does not index/);
+    expect(warning?.action).not.toMatch(/Nothing urgent/);
   });
 });
 
@@ -241,6 +305,17 @@ describe('debt payoff', () => {
   it('says nothing when there are no debts', () => {
     expect(findById({ ...SAMPLE_PLAN, debts: [] }, 'debt-payoff')).toBeUndefined();
   });
+
+  it('credits the payoff with filling the emergency fund only when the fund fills after it', () => {
+    // The sample's fund reaches its target before the auto loan clears; on one
+    // income it gets there afterwards.
+    expect(findById(SAMPLE_PLAN, 'debt-payoff')?.body).not.toContain('carries the emergency fund');
+    const oneIncome: Plan = {
+      ...SAMPLE_PLAN,
+      incomes: SAMPLE_PLAN.incomes.filter((i) => i.ownerId === 'p1'),
+    };
+    expect(findById(oneIncome, 'debt-payoff')?.body).toContain('carries the emergency fund');
+  });
 });
 
 describe('fee drag', () => {
@@ -267,13 +342,19 @@ describe('fee drag', () => {
 
 describe('contribution headroom', () => {
   it('flags a contribution just under the limit', () => {
+    // The sample's own Roth IRA is already under the limit, so check the
+    // shortfall this override produces rather than that the card appears.
     const nearLimit: Plan = {
       ...SAMPLE_PLAN,
       accounts: SAMPLE_PLAN.accounts.map((a) =>
         a.type === 'roth_ira' ? { ...a, monthlyContribution: 580 } : a,
       ),
     };
-    expect(findById(nearLimit, 'contribution-headroom')).toBeDefined();
+    const { limitIra } = taxTableFor(SAMPLE_PLAN.startYear, SAMPLE_PLAN.assumptions.inflation);
+    const roth = findById(nearLimit, 'contribution-headroom')?.metrics.find(
+      (m) => m.label === 'Roth IRA',
+    );
+    expect(roth?.value).toBe(`${formatCurrency(limitIra - 580 * 12)}/yr short`);
   });
 
   it('stays quiet when contributions are far below the limit', () => {
