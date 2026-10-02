@@ -98,6 +98,11 @@ export function nominalRaiseOf(income: Income, cpi: number): number {
   return income.nominalGrowthRate ?? (1 + cpi) * (1 + income.realGrowthRate) - 1;
 }
 
+/** The premium over official inflation that gives a nominal `raise` at `cpi`. */
+export function premiumOverCpi(raise: number, cpi: number): number {
+  return (1 + raise) / (1 + cpi) - 1;
+}
+
 /**
  * How much an income has grown by `year`, as a multiple of its starting value.
  *

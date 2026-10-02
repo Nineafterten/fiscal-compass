@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { incomeGrowthFactor, project, ssClaimFactor } from './project';
+import {
+  incomeGrowthFactor,
+  nominalRaiseOf,
+  premiumOverCpi,
+  project,
+  ssClaimFactor,
+} from './project';
 import { solveEarliestRetirementAge, computeMetrics, solveCoastAge } from './solve';
 import { taxTableFor } from '../../data/taxTables';
 import type { Income, Plan } from '../../types/plan';
@@ -507,6 +513,27 @@ describe('household price level', () => {
     const rows = project(plan, { inflationSequence: [0.02, 0.05] }).rows;
     expect(rows[1].householdPriceLevel).toBeCloseTo(1.06, 12);
     expect(rows[2].householdPriceLevel).toBeCloseTo(1.06 * 1.03, 12);
+  });
+});
+
+describe('premium over CPI', () => {
+  const linked = (realGrowthRate: number): Income => ({
+    id: 'sal',
+    name: 'Salary',
+    type: 'salary',
+    ownerId: 'p1',
+    annualGross: 100_000,
+    realGrowthRate,
+  });
+
+  it('gives back the raise it was set from', () => {
+    for (const [raise, cpi] of [[0.04, 0.025], [0, 0.06], [-0.1, 0], [0.2, 0.06]]) {
+      expect(nominalRaiseOf(linked(premiumOverCpi(raise, cpi)), cpi)).toBeCloseTo(raise, 12);
+    }
+  });
+
+  it('is the premium a CPI-linked raise already has', () => {
+    expect(premiumOverCpi(nominalRaiseOf(linked(0.01), 0.025), 0.025)).toBeCloseTo(0.01, 12);
   });
 });
 

@@ -22,10 +22,10 @@ import {
 import { IconCoin, IconFlag, IconInfoCircle, IconPlus, IconTrash } from '@tabler/icons-react';
 
 import { useActivePlan, usePlanAnalysis, useSettings } from '../db/hooks';
+import { RaiseInput } from '../components/inputs/RaiseInput';
 import { SliderRow } from '../components/inputs/SliderRow';
 import { formatCompact, formatCurrency, formatPercent } from '../lib/format';
 import { STATE_TAX_RULES, stateRule } from '../data/taxTables';
-import { nominalRaiseOf } from '../lib/engine/project';
 import type {
   Account,
   AccountType,
@@ -603,7 +603,6 @@ function IncomeRow({
   // Salary is naturally annual, supplemental income naturally monthly — so both
   // are editable and kept in sync through the stored annual figure.
   const monthly = Math.round((income.annualGross / 12) * 100) / 100;
-  const raisePct = Number((nominalRaiseOf(income, cpi) * 100).toFixed(1));
 
   return (
     <Card withBorder padding="md" radius="sm">
@@ -654,22 +653,7 @@ function IncomeRow({
           step={1000}
           size="sm"
         />
-        <NumberInput
-          label="Annual raise"
-          description={
-            income.nominalGrowthRate === undefined
-              ? `CPI + ${formatPercent(income.realGrowthRate, 1)}`
-              : 'nominal'
-          }
-          value={raisePct}
-          onChange={(v) => onPatch({ nominalGrowthRate: (typeof v === 'number' ? v : 0) / 100 })}
-          suffix="%"
-          min={-10}
-          max={20}
-          step={0.5}
-          decimalScale={1}
-          size="sm"
-        />
+        <RaiseInput income={income} cpi={cpi} onPatch={onPatch} />
       </SimpleGrid>
     </Card>
   );
