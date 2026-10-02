@@ -25,6 +25,7 @@ import { useActivePlan, usePlanAnalysis, useSettings } from '../db/hooks';
 import { SliderRow } from '../components/inputs/SliderRow';
 import { formatCompact, formatCurrency, formatPercent } from '../lib/format';
 import { STATE_TAX_RULES, stateRule } from '../data/taxTables';
+import { nominalRaiseOf } from '../lib/engine/project';
 import type {
   Account,
   AccountType,
@@ -240,6 +241,7 @@ export function PlanInputs() {
                 <IncomeRow
                   key={income.id}
                   income={income}
+                  cpi={plan.assumptions.inflation}
                   ownerOptions={ownerOptions}
                   onPatch={(patch) => patchList('incomes', income.id, patch)}
                   onRemove={() => removeFromList('incomes', income.id)}
@@ -587,11 +589,13 @@ function RemoveButton({ label, onRemove }: { label: string; onRemove: () => void
 
 function IncomeRow({
   income,
+  cpi,
   ownerOptions,
   onPatch,
   onRemove,
 }: {
   income: Income;
+  cpi: number;
   ownerOptions: { value: string; label: string }[];
   onPatch: (patch: Partial<Income>) => void;
   onRemove: () => void;
@@ -599,7 +603,7 @@ function IncomeRow({
   // Salary is naturally annual, supplemental income naturally monthly — so both
   // are editable and kept in sync through the stored annual figure.
   const monthly = Math.round((income.annualGross / 12) * 100) / 100;
-  const raisePct = Number(((income.nominalGrowthRate ?? income.realGrowthRate) * 100).toFixed(1));
+  const raisePct = Number((nominalRaiseOf(income, cpi) * 100).toFixed(1));
 
   return (
     <Card withBorder padding="md" radius="sm">
@@ -652,7 +656,11 @@ function IncomeRow({
         />
         <NumberInput
           label="Annual raise"
-          description="nominal"
+          description={
+            income.nominalGrowthRate === undefined
+              ? `CPI + ${formatPercent(income.realGrowthRate, 1)}`
+              : 'nominal'
+          }
           value={raisePct}
           onChange={(v) => onPatch({ nominalGrowthRate: (typeof v === 'number' ? v : 0) / 100 })}
           suffix="%"
