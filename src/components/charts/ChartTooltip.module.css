@@ -1,0 +1,55 @@
+/*
+ * Recharts renders its own tooltip DOM, so it can't inherit Mantine's surface
+ * styles. These classes are handed to Recharts via `contentStyle` equivalents
+ * and applied to the custom tooltip so it matches the app in both themes.
+ */
+
+.tooltip {
+  background: var(--mantine-color-body);
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+  box-shadow: var(--mantine-shadow-md);
+  padding: 8px 12px;
+  font-size: var(--mantine-font-size-xs);
+  min-width: 180px;
+}
+
+.label {
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: var(--mantine-color-text);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  line-height: 1.6;
+}
+
+.name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--mantine-color-dimmed);
+}
+
+.swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--mantine-color-text);
+}
+
+.total {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--mantine-color-default-border);
+}

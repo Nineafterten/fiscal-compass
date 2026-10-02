@@ -1,0 +1,32 @@
+.value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.neutral {
+  color: var(--mantine-color-text);
+}
+
+.positive {
+  color: var(--fc-positive);
+}
+
+.caution {
+  color: var(--fc-caution);
+}
+
+.negative {
+  color: var(--fc-negative);
+}
+
+.info {
+  opacity: 0.45;
+  cursor: help;
+  flex-shrink: 0;
+}
+
+.info:hover,
+.info:focus-visible {
+  opacity: 0.9;
+}

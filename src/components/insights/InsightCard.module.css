@@ -1,0 +1,64 @@
+/*
+ * A left border carries the severity, so the scan order down the page is
+ * legible without relying on the badge — and never on color alone, since
+ * every card also states its severity in words.
+ */
+.critical,
+.warning,
+.opportunity,
+.ok {
+  border-left-width: 3px;
+}
+
+.critical {
+  border-left-color: var(--mantine-color-red-6);
+}
+
+.warning {
+  border-left-color: var(--mantine-color-yellow-6);
+}
+
+.opportunity {
+  border-left-color: var(--mantine-color-blue-6);
+}
+
+.ok {
+  border-left-color: var(--mantine-color-teal-6);
+}
+
+.critical .icon {
+  color: var(--mantine-color-red-6);
+}
+
+.warning .icon {
+  color: var(--mantine-color-yellow-7);
+}
+
+.opportunity .icon {
+  color: var(--mantine-color-blue-6);
+}
+
+.ok .icon {
+  color: var(--mantine-color-teal-6);
+}
+
+.icon {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.metric {
+  background: var(--mantine-color-default-hover);
+  border-radius: var(--mantine-radius-sm);
+  padding: 8px 10px;
+}
+
+.action {
+  border-left: 2px solid var(--mantine-color-default-border);
+  padding-left: 12px;
+  line-height: 1.6;
+}
+
+[data-mantine-color-scheme='dark'] .warning .icon {
+  color: var(--mantine-color-yellow-5);
+}

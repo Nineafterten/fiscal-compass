@@ -1,0 +1,27 @@
+node_modules
+dist
+dist-ssr
+dist-local
+*.tsbuildinfo
+*.local
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.claude/launch.json
+
+# ---------------------------------------------------------------------------
+# PRIVACY — never commit real financial data.
+#
+# `src/data/profiles/local.ts` is your actual household: balances, income,
+# debts. The app auto-loads it if present and falls back to the committed
+# fictional sample when it isn't, so the repo stays shareable.
+# ---------------------------------------------------------------------------
+src/data/profiles/local.ts
+# Personal working notes — anything named *.local.md stays out of the repo.
+*.local.*
+*.csv
+backups/
+.env
+.env.*
+!.env.example
+.netlify

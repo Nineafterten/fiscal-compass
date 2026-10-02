@@ -1,0 +1,67 @@
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+}
+
+:root {
+  /*
+   * Chart series palette.
+   *
+   * These five are used IN THIS ORDER as the stacking order of the net-worth
+   * chart, which is what makes them safe: the order is the colorblind-safety
+   * mechanism, not decoration. Validated in both modes — worst adjacent pair
+   * scores CVD ΔE 9.1 light / 8.4 dark and normal-vision ΔE 19.6 / 19.3.
+   * Re-run the validator before reordering or substituting any of them.
+   *
+   * Three light-mode steps sit below 3:1 against a light surface, so the
+   * relief rule applies: the year-by-year table at /projection is the
+   * non-color reading of the same data, and the legend is always present.
+   */
+  --fc-series-1: #2a78d6; /* blue    — pre-tax (401k / IRA) */
+  --fc-series-2: #eb6834; /* orange  — Roth / HSA */
+  --fc-series-3: #1baf7a; /* aqua    — taxable & cash */
+  --fc-series-4: #eda100; /* yellow  — 529 education */
+  --fc-series-5: #e87ba4; /* magenta — property */
+
+  /* Reserved status color. Never a categorical slot — it only ever means
+     "money owed" or "money out", always beside a label saying so. */
+  --fc-series-danger: #e34948;
+
+  --fc-positive: var(--mantine-color-teal-7);
+  --fc-caution: var(--mantine-color-yellow-7);
+  --fc-negative: var(--mantine-color-red-7);
+
+  --fc-grid: var(--mantine-color-gray-3);
+}
+
+[data-mantine-color-scheme='dark'] {
+  /* The same five hues re-stepped for the dark surface — selected against it,
+     not an automatic lightening of the light values. */
+  --fc-series-1: #3987e5;
+  --fc-series-2: #d95926;
+  --fc-series-3: #199e70;
+  --fc-series-4: #c98500;
+  --fc-series-5: #d55181;
+
+  --fc-series-danger: #e66767;
+
+  --fc-positive: var(--mantine-color-teal-4);
+  --fc-caution: var(--mantine-color-yellow-4);
+  --fc-negative: var(--mantine-color-red-4);
+
+  --fc-grid: var(--mantine-color-dark-4);
+}
+
+/* Tabular figures keep columns of money aligned as values change. */
+.numeric {
+  font-variant-numeric: tabular-nums;
+}
