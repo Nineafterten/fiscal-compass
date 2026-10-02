@@ -552,6 +552,7 @@ export function project(plan: Plan, options: ProjectionOptions = {}): Projection
       ages,
       primaryAge,
       retired: householdRetired,
+      householdPriceLevel: cumulativeHousehold,
       earnedIncome,
       selfEmploymentIncome,
       pensionIncome,

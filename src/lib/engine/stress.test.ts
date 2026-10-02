@@ -55,6 +55,26 @@ describe('stagflation', () => {
     expect(sequence[0]).toBeCloseTo(0.095, 10);
     expect(sequence[7]).toBeCloseTo(0.095, 10);
   });
+
+  it('is never a relief against the baseline', () => {
+    // Higher inflation inflates nominal balances; the comparison must see through that.
+    for (const plan of [withInflation(0.025), withInflation(0.06)]) {
+      expect(runStress(stagflation, plan, project(plan)).vsBaseline).toBeLessThan(0);
+    }
+  });
+});
+
+describe('stress comparison', () => {
+  it("reports the final net worth in today's dollars", () => {
+    const plan = withInflation(0.025);
+    const result = runStress(stagflation, plan, project(plan));
+    const last = result.projection.rows[result.projection.rows.length - 1];
+    expect(last.householdPriceLevel).toBeGreaterThan(1);
+    expect(result.finalNetWorthToday).toBeCloseTo(
+      result.projection.finalNetWorth / last.householdPriceLevel,
+      6,
+    );
+  });
 });
 
 describe('raises trail prices', () => {

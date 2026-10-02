@@ -42,9 +42,19 @@ export interface StressResult {
   projection: ProjectionResult;
   succeeded: boolean;
   depletionAge?: number;
-  finalNetWorth: number;
-  /** Change in final net worth against the baseline, as a fraction. */
+  /** Final net worth in today's dollars, deflated along this run's own prices. */
+  finalNetWorthToday: number;
+  /**
+   * Change in final net worth against the baseline, as a fraction. Compared in
+   * today's dollars, because a scenario that raises inflation also inflates
+   * nominal balances.
+   */
   vsBaseline: number;
+}
+
+function finalNetWorthToday(projection: ProjectionResult): number {
+  const last = projection.rows[projection.rows.length - 1];
+  return last ? projection.finalNetWorth / last.householdPriceLevel : 0;
 }
 
 /** Years from the plan start until the household retires. */
@@ -214,17 +224,16 @@ export function runStress(
   const depletionRow = projection.depletionYear
     ? projection.rows.find((r) => r.year === projection.depletionYear)
     : undefined;
+  const today = finalNetWorthToday(projection);
+  const baselineToday = finalNetWorthToday(baseline);
 
   return {
     scenario,
     projection,
     succeeded: projection.succeeded,
     depletionAge: depletionRow?.primaryAge,
-    finalNetWorth: projection.finalNetWorth,
-    vsBaseline:
-      baseline.finalNetWorth !== 0
-        ? (projection.finalNetWorth - baseline.finalNetWorth) / Math.abs(baseline.finalNetWorth)
-        : 0,
+    finalNetWorthToday: today,
+    vsBaseline: baselineToday !== 0 ? (today - baselineToday) / Math.abs(baselineToday) : 0,
   };
 }
 

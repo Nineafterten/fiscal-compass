@@ -489,6 +489,12 @@ export interface YearRow {
   /** Age of the primary (first) person — convenience for charting. */
   primaryAge: number;
   retired: boolean;
+  /**
+   * What the household basket costs relative to the start year, along this
+   * run's own inflation path. A nominal amount divided by it is in today's
+   * dollars.
+   */
+  householdPriceLevel: number;
 
   // Income
   earnedIncome: number;

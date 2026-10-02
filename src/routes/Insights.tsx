@@ -126,7 +126,7 @@ export function Insights() {
               <Table.Th>Scenario</Table.Th>
               <Table.Th>What happens</Table.Th>
               <Table.Th ta="right">Outcome</Table.Th>
-              <Table.Th ta="right">Ends with</Table.Th>
+              <Table.Th ta="right">Ends with (today's $)</Table.Th>
               <Table.Th ta="right">vs baseline</Table.Th>
             </Table.Tr>
           </Table.Thead>
@@ -163,7 +163,7 @@ export function Insights() {
                   )}
                 </Table.Td>
                 <Table.Td ta="right" className="numeric">
-                  {formatCompact(result.finalNetWorth)}
+                  {formatCompact(result.finalNetWorthToday)}
                 </Table.Td>
                 <Table.Td ta="right" className="numeric">
                   <Text
@@ -180,7 +180,8 @@ export function Insights() {
 
         <Text size="xs" c="dimmed" mt="sm">
           Hover a scenario name for why that particular shape of bad news matters. Final
-          figures are nominal; the comparison column is what to read.
+          figures are in today's dollars, deflated by each scenario's own prices, so a
+          scenario that raises inflation can't look better for inflating the balance.
         </Text>
       </Card>
 

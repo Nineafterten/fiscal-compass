@@ -492,6 +492,24 @@ describe('withdrawals and shortfall', () => {
   });
 });
 
+describe('household price level', () => {
+  const plan = basePlan({
+    assumptions: { ...basePlan().assumptions, inflation: 0.02, householdInflation: 0.03 },
+  });
+
+  it('compounds at the household rate from 1 in the start year', () => {
+    const rows = project(plan).rows;
+    expect(rows[0].householdPriceLevel).toBe(1);
+    expect(rows[3].householdPriceLevel).toBeCloseTo(1.03 ** 3, 12);
+  });
+
+  it('follows an inflation sequence, keeping the basket gap', () => {
+    const rows = project(plan, { inflationSequence: [0.02, 0.05] }).rows;
+    expect(rows[1].householdPriceLevel).toBeCloseTo(1.06, 12);
+    expect(rows[2].householdPriceLevel).toBeCloseTo(1.06 * 1.03, 12);
+  });
+});
+
 describe('raise caps', () => {
   const salary: Income = {
     id: 'sal',
