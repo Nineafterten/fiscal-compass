@@ -110,16 +110,17 @@ export const STRESS_SCENARIOS: StressScenario[] = [
   {
     id: 'stagflation',
     name: 'Stagflation',
-    description: 'Inflation at 6% with weak returns for eight years.',
+    description:
+      'Inflation at 6%, or 3.5 points above official CPI if that is higher, with weak returns for eight years.',
     rationale:
       'The combination that hurts most: spending rises faster while the portfolio funding it stalls. Fixed income offers no shelter, and the erosion is invisible in nominal terms — the balance still goes up while what it buys goes down.',
     build: (plan) => {
       const n = horizon(plan);
       const weak = shockFor(0.02);
       const marketShocks = Array.from({ length: n }, (_, i) => (i < 8 ? weak : 0));
-      const inflationSequence = Array.from({ length: n }, (_, i) =>
-        i < 8 ? 0.06 : plan.assumptions.inflation,
-      );
+      const { inflation } = plan.assumptions;
+      const high = Math.max(0.06, inflation + 0.035);
+      const inflationSequence = Array.from({ length: n }, (_, i) => (i < 8 ? high : inflation));
       return { plan, options: { marketShocks, inflationSequence } };
     },
   },
@@ -148,20 +149,28 @@ export const STRESS_SCENARIOS: StressScenario[] = [
   {
     id: 'wage-stagnation',
     name: 'Raises keep trailing prices',
-    description: 'Pay rises 2% a year while the household basket rises 4.5% — for a decade.',
+    description:
+      'For ten years, raises run 2.5 points a year behind household costs, or stop if costs rise less than that. Normal raises then resume from the lower pay.',
     rationale:
       'No market event required, and easy to miss because nothing dramatic happens in any single year. Income simply buys less each year, savings capacity erodes with it, and the shortfall only becomes visible once it has compounded for a decade.',
-    build: (plan) => ({
-      plan: {
-        ...plan,
-        incomes: plan.incomes.map((income) =>
-          income.type === 'salary'
-            ? { ...income, nominalGrowthRate: 0.02, realGrowthRate: -0.02 }
-            : income,
-        ),
-      },
-      options: {},
-    }),
+    build: (plan) => {
+      const { inflation, householdInflation } = plan.assumptions;
+      const cap = Math.max(0, (householdInflation ?? inflation) - 0.025);
+      return {
+        plan: {
+          ...plan,
+          // Caps apply to nominal raises, so a salary quoted as growth above CPI
+          // is restated as the raise that implies.
+          incomes: plan.incomes.map((income) =>
+            income.type === 'salary' && income.nominalGrowthRate === undefined
+              ? { ...income, nominalGrowthRate: (1 + inflation) * (1 + income.realGrowthRate) - 1 }
+              : income,
+          ),
+        },
+        // Index 0 is the start year, which has no raise; 1–10 are the decade.
+        options: { raiseCaps: Array.from({ length: 11 }, () => cap) },
+      };
+    },
   },
   {
     id: 'job-loss',

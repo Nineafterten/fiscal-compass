@@ -4,7 +4,10 @@ import { project } from './project';
 import { runStress, STRESS_SCENARIOS } from './stress';
 import type { Plan } from '../../types/plan';
 
-const basket = STRESS_SCENARIOS.find((s) => s.id === 'basket-outruns-cpi')!;
+const scenario = (id: string) => STRESS_SCENARIOS.find((s) => s.id === id)!;
+const basket = scenario('basket-outruns-cpi');
+const stagflation = scenario('stagflation');
+const wages = scenario('wage-stagnation');
 
 function withInflation(inflation: number, householdInflation?: number): Plan {
   return {
@@ -34,6 +37,48 @@ describe('basket outruns CPI', () => {
   it('is never a relief against the baseline', () => {
     for (const plan of [withInflation(0.025), withInflation(0.06), withInflation(0.025, 0.07)]) {
       expect(runStress(basket, plan, project(plan)).vsBaseline).toBeLessThanOrEqual(0);
+    }
+  });
+});
+
+describe('stagflation', () => {
+  const inflationFor = (plan: Plan) => stagflation.build(plan).options.inflationSequence ?? [];
+
+  it('runs inflation at 6% for eight years while CPI is low', () => {
+    const sequence = inflationFor(withInflation(0.025));
+    expect(sequence.slice(0, 8)).toEqual(Array.from({ length: 8 }, () => expect.closeTo(0.06, 10)));
+    expect(sequence[8]).toBe(0.025);
+  });
+
+  it('keeps inflation 3.5 points above CPI when CPI is high', () => {
+    const sequence = inflationFor(withInflation(0.06));
+    expect(sequence[0]).toBeCloseTo(0.095, 10);
+    expect(sequence[7]).toBeCloseTo(0.095, 10);
+  });
+});
+
+describe('raises trail prices', () => {
+  it('caps raises 2.5 points below household costs for ten years', () => {
+    expect(wages.build(withInflation(0.025, 0.045)).options.raiseCaps).toEqual(
+      Array.from({ length: 11 }, () => expect.closeTo(0.02, 10)),
+    );
+  });
+
+  it('stops raises rather than cutting pay when costs rise less than 2.5%', () => {
+    expect(wages.build(withInflation(0.015)).options.raiseCaps?.[1]).toBe(0);
+  });
+
+  it('restates salaries quoted above CPI without changing them', () => {
+    // With the caps removed, the restated plan must project exactly as the original.
+    const plan = withInflation(0.025);
+    const restated = wages.build(plan).plan;
+    expect(restated.incomes.every((i) => i.type !== 'salary' || i.nominalGrowthRate !== undefined)).toBe(true);
+    expect(project(restated).finalNetWorth).toBeCloseTo(project(plan).finalNetWorth, 0);
+  });
+
+  it('costs the plan something whatever the inflation assumption', () => {
+    for (const plan of [withInflation(0.025), withInflation(0.06)]) {
+      expect(runStress(wages, plan, project(plan)).vsBaseline).toBeLessThan(0);
     }
   });
 });

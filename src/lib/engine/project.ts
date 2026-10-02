@@ -36,6 +36,12 @@ export interface ProjectionOptions {
   marketShocks?: number[];
   /** Per-year inflation overrides, same length convention as `marketShocks`. */
   inflationSequence?: number[];
+  /**
+   * Per-year ceiling on salary raises, same length convention as
+   * `marketShocks`. Applies to salaries with a `nominalGrowthRate`; a year
+   * without an entry grants the salary's own raise.
+   */
+  raiseCaps?: number[];
   /** Force windfalls on or off regardless of each one's `included` flag. */
   includeWindfalls?: boolean;
   /**
@@ -97,18 +103,25 @@ export function incomeGrowthFactor(
   startYear: number,
   cumulativeInflation: number,
   t: number,
+  raiseCaps?: number[],
 ): number {
   if (income.nominalGrowthRate === undefined) {
     // Legacy path: growth expressed as a real premium over official inflation.
     return cumulativeInflation * Math.pow(1 + income.realGrowthRate, t);
   }
 
+  const growth = income.nominalGrowthRate;
+  const caps = income.type === 'salary' ? raiseCaps : undefined;
   const frozen = new Set(income.freezeYears ?? []);
   let raises = 0;
+  let cappedFactor = 1;
   for (let y = startYear + 1; y <= year; y++) {
-    if (!frozen.has(y)) raises++;
+    if (frozen.has(y)) continue;
+    const cap = caps?.[y - startYear];
+    if (cap !== undefined && cap < growth) cappedFactor *= 1 + cap;
+    else raises++;
   }
-  return Math.pow(1 + income.nominalGrowthRate, raises);
+  return Math.pow(1 + growth, raises) * cappedFactor;
 }
 
 export function project(plan: Plan, options: ProjectionOptions = {}): ProjectionResult {
@@ -200,7 +213,9 @@ export function project(plan: Plan, options: ProjectionOptions = {}): Projection
       if (employmentEnded) continue;
       if (inc.endYear !== undefined && year > inc.endYear) continue;
 
-      const amount = inc.annualGross * incomeGrowthFactor(inc, year, plan.startYear, cumulativeInflation, t);
+      const amount =
+        inc.annualGross *
+        incomeGrowthFactor(inc, year, plan.startYear, cumulativeInflation, t, options.raiseCaps);
 
       if (inc.type === 'salary') earnedIncome += amount;
       else if (inc.type === 'self_employment') selfEmploymentIncome += amount;
@@ -355,7 +370,7 @@ export function project(plan: Plan, options: ProjectionOptions = {}): Projection
             (s, i) =>
               s +
               i.annualGross *
-                incomeGrowthFactor(i, year, plan.startYear, cumulativeInflation, t),
+                incomeGrowthFactor(i, year, plan.startYear, cumulativeInflation, t, options.raiseCaps),
             0,
           );
 

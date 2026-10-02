@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { project, ssClaimFactor } from './project';
+import { incomeGrowthFactor, project, ssClaimFactor } from './project';
 import { solveEarliestRetirementAge, computeMetrics, solveCoastAge } from './solve';
 import { taxTableFor } from '../../data/taxTables';
-import type { Plan } from '../../types/plan';
+import type { Income, Plan } from '../../types/plan';
 
 /**
  * A deliberately minimal plan. Tests build on it with spreads so each one
@@ -489,6 +489,39 @@ describe('withdrawals and shortfall', () => {
     const first = project(plan).rows[0];
     expect(first.withdrawalsByBucket.taxable).toBeGreaterThan(0);
     expect(first.withdrawalsByBucket.pretax).toBe(0);
+  });
+});
+
+describe('raise caps', () => {
+  const salary: Income = {
+    id: 'sal',
+    name: 'Salary',
+    type: 'salary',
+    ownerId: 'p1',
+    annualGross: 100_000,
+    realGrowthRate: 0,
+    nominalGrowthRate: 0.04,
+  };
+  const caps = [0.01, 0.01, 0.01];
+  const factor = (income: Income, year: number) =>
+    incomeGrowthFactor(income, year, 2026, 1, year - 2026, caps);
+
+  it('limits raises in the capped years, then resumes them from the lower base', () => {
+    expect(factor(salary, 2028)).toBeCloseTo(1.01 ** 2, 12);
+    expect(factor(salary, 2030)).toBeCloseTo(1.01 ** 2 * 1.04 ** 2, 12);
+  });
+
+  it('never raises a salary above its own rate', () => {
+    const slow = { ...salary, nominalGrowthRate: 0.005 };
+    expect(factor(slow, 2028)).toBeCloseTo(1.005 ** 2, 12);
+  });
+
+  it('leaves other income alone', () => {
+    expect(factor({ ...salary, type: 'pension' }, 2028)).toBeCloseTo(1.04 ** 2, 12);
+  });
+
+  it('keeps a frozen year frozen', () => {
+    expect(factor({ ...salary, freezeYears: [2027] }, 2028)).toBeCloseTo(1.01, 12);
   });
 });
 
