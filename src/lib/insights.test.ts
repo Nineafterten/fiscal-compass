@@ -182,6 +182,24 @@ describe('raise freeze', () => {
     expect(insight).toBeDefined();
     expect(insight?.severity).toBe('warning');
     expect(insight?.metrics.some((m) => m.label.includes('Salary gap'))).toBe(true);
+    expect(insight?.metrics.find((m) => m.label === 'Normal raise')?.value).toBe('4.0%');
+  });
+
+  it('uses the raise a salary quoted above CPI actually gets', () => {
+    const salary = SAMPLE_PLAN.incomes.find((i) => i.type === 'salary')!;
+    const frozen: Plan = {
+      ...SAMPLE_PLAN,
+      incomes: SAMPLE_PLAN.incomes.map((i) =>
+        i.id === salary.id ? { ...i, freezeYears: [SAMPLE_PLAN.startYear + 1] } : i,
+      ),
+    };
+    const raise = (1 + SAMPLE_PLAN.assumptions.inflation) * (1 + salary.realGrowthRate) - 1;
+    const insight = findById(frozen, 'raise-freeze');
+    const metric = (label: string) => insight?.metrics.find((m) => m.label === label)?.value;
+    expect(metric('Normal raise')).toBe(`${(raise * 100).toFixed(1)}%`);
+    expect(metric('Salary gap, first year')).toBe(formatCurrency(salary.annualGross * raise));
+    // One lost raise leaves later pay at 1/(1 + raise) of the line, not 1 - raise.
+    expect(insight?.body).toContain(`sits about ${((raise / (1 + raise)) * 100).toFixed(1)}% below`);
   });
 });
 

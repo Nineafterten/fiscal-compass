@@ -91,6 +91,14 @@ function grow(startBalance: number, flow: number, rate: number): number {
 }
 
 /**
+ * An income's yearly raise as a nominal rate. Income quoted as a premium over
+ * official inflation gets the raise that premium implies at `cpi`.
+ */
+export function nominalRaiseOf(income: Income, cpi: number): number {
+  return income.nominalGrowthRate ?? (1 + cpi) * (1 + income.realGrowthRate) - 1;
+}
+
+/**
  * How much an income has grown by `year`, as a multiple of its starting value.
  *
  * Growth compounds only in years that actually granted a raise, so a freeze

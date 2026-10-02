@@ -22,7 +22,7 @@ import { isLiquid, taxBucketOf, type Plan, type ProjectionResult } from '../type
 import { rmdStartAge, taxTableFor } from '../data/taxTables';
 import { computeTaxes } from './engine/tax';
 import { debtPayoffMilestones, extraPaymentImpact } from './engine/amortize';
-import { project } from './engine/project';
+import { nominalRaiseOf, project } from './engine/project';
 import { successProbability } from './engine/montecarlo';
 import type { PlanMetrics } from './engine/solve';
 
@@ -1165,7 +1165,7 @@ const raiseFreeze: InsightRule = ({ plan }) => {
 
   const income = frozen[0];
   const years = income.freezeYears ?? [];
-  const growth = income.nominalGrowthRate ?? 0.03;
+  const growth = nominalRaiseOf(income, plan.assumptions.inflation);
 
   const unfrozen: Plan = {
     ...plan,
@@ -1189,10 +1189,10 @@ const raiseFreeze: InsightRule = ({ plan }) => {
     title: `A skipped raise is permanent, not a one-year dip`,
     ruleOfThumb:
       'Raises compound. A year without one lowers every subsequent year by the same proportion, because the next raise is applied to the smaller base.',
-    body: `${years.length === 1 ? `No raise in ${years[0]}` : `No raise in ${years.join(', ')}`} means pay never catches back up to where the ${pct(growth)} trend would have put it — every later year sits about ${pct(growth)} below the line it would otherwise have followed. The immediate gap is roughly ${money(annualGap)} of salary; the compounding is what makes it worth raising rather than absorbing.`,
+    body: `${years.length === 1 ? `No raise in ${years[0]}` : `No raise in ${years.join(', ')}`} means pay never catches back up to where the ${pct(growth, 1)} trend would have put it — every later year sits about ${pct(growth / (1 + growth), 1)} below the line it would otherwise have followed. The immediate gap is roughly ${money(annualGap)} of salary; the compounding is what makes it worth raising rather than absorbing.`,
     metrics: [
       { label: 'Frozen year(s)', value: years.join(', ') },
-      { label: 'Normal raise', value: pct(growth) },
+      { label: 'Normal raise', value: pct(growth, 1) },
       { label: 'Salary gap, first year', value: money(annualGap) },
       {
         label: 'Cost by end of plan',

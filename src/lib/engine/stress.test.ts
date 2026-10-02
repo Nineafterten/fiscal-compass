@@ -111,6 +111,16 @@ describe('raises trail prices', () => {
     expect(project(restated).finalNetWorth).toBeCloseTo(project(plan).finalNetWorth, 0);
   });
 
+  it('restates from official CPI and keeps a raise already given in nominal terms', () => {
+    const plan: Plan = {
+      ...withInflation(0.025, 0.04),
+      incomes: SAMPLE_PLAN.incomes.map((i, n) => (n === 1 ? { ...i, nominalGrowthRate: 0.05 } : i)),
+    };
+    const [restated, nominal] = wages.build(plan).plan.incomes;
+    expect(restated.nominalGrowthRate).toBeCloseTo(1.025 * (1 + restated.realGrowthRate) - 1, 12);
+    expect(nominal.nominalGrowthRate).toBe(0.05);
+  });
+
   it('costs the plan something whatever the inflation assumption', () => {
     for (const plan of [withInflation(0.025), withInflation(0.06)]) {
       expect(runStress(wages, plan, project(plan)).vsBaseline).toBeLessThan(0);

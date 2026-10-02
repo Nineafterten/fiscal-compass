@@ -16,7 +16,7 @@
  */
 
 import type { Plan, ProjectionResult } from '../../types/plan';
-import { project, type ProjectionOptions } from './project';
+import { nominalRaiseOf, project, type ProjectionOptions } from './project';
 
 /** Reference account used to translate a target return into a shock. */
 const REFERENCE_RETURN = 0.07;
@@ -172,8 +172,8 @@ export const STRESS_SCENARIOS: StressScenario[] = [
           // Caps apply to nominal raises, so a salary quoted as growth above CPI
           // is restated as the raise that implies.
           incomes: plan.incomes.map((income) =>
-            income.type === 'salary' && income.nominalGrowthRate === undefined
-              ? { ...income, nominalGrowthRate: (1 + inflation) * (1 + income.realGrowthRate) - 1 }
+            income.type === 'salary'
+              ? { ...income, nominalGrowthRate: nominalRaiseOf(income, inflation) }
               : income,
           ),
         },
