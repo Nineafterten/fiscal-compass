@@ -9,7 +9,6 @@ import {
   Center,
   Group,
   Loader,
-  NumberInput,
   Select,
   SimpleGrid,
   Stack,
@@ -22,6 +21,7 @@ import {
 import { IconCoin, IconFlag, IconInfoCircle, IconPlus, IconTrash } from '@tabler/icons-react';
 
 import { useActivePlan, usePlanAnalysis, useSettings } from '../db/hooks';
+import { NumberField } from '../components/inputs/NumberField';
 import { RaiseInput } from '../components/inputs/RaiseInput';
 import { SliderRow } from '../components/inputs/SliderRow';
 import { formatCompact, formatCurrency, formatPercent } from '../lib/format';
@@ -194,14 +194,12 @@ export function PlanInputs() {
                       format={(v) => `${v}`}
                       help="Claiming at 62 permanently cuts the benefit ~30%; waiting to 70 raises it ~24% over the full-retirement-age amount."
                     />
-                    <NumberInput
+                    <NumberField
                       label="Estimated monthly benefit at full retirement age"
                       description="From your Social Security statement, in today's dollars"
                       value={person.ssMonthlyAtFra ?? 0}
-                      onChange={(v) =>
-                        patchList('people', person.id, {
-                          ssMonthlyAtFra: typeof v === 'number' ? v : 0,
-                        })
+                      onSave={(ssMonthlyAtFra) =>
+                        patchList('people', person.id, { ssMonthlyAtFra })
                       }
                       prefix="$"
                       thousandSeparator=","
@@ -633,20 +631,20 @@ function IncomeRow({
           size="sm"
           allowDeselect={false}
         />
-        <NumberInput
+        <NumberField
           label="Monthly"
           value={monthly}
-          onChange={(v) => onPatch({ annualGross: (typeof v === 'number' ? v : 0) * 12 })}
+          onSave={(m) => onPatch({ annualGross: m * 12 })}
           prefix="$"
           thousandSeparator=","
           min={0}
           step={100}
           size="sm"
         />
-        <NumberInput
+        <NumberField
           label="Annual"
           value={Math.round(income.annualGross)}
-          onChange={(v) => onPatch({ annualGross: typeof v === 'number' ? v : 0 })}
+          onSave={(annualGross) => onPatch({ annualGross })}
           prefix="$"
           thousandSeparator=","
           min={0}
@@ -699,31 +697,32 @@ function AccountRow({
           size="sm"
           allowDeselect={false}
         />
-        <NumberInput
+        <NumberField
           label="Balance"
           value={account.balance}
-          onChange={(v) => onPatch({ balance: typeof v === 'number' ? v : 0 })}
+          onSave={(balance) => onPatch({ balance })}
           prefix="$"
           thousandSeparator=","
           min={0}
           step={1000}
           size="sm"
         />
-        <NumberInput
+        <NumberField
           label="Monthly contribution"
           value={account.monthlyContribution}
-          onChange={(v) => onPatch({ monthlyContribution: typeof v === 'number' ? v : 0 })}
+          onSave={(monthlyContribution) => onPatch({ monthlyContribution })}
           prefix="$"
           thousandSeparator=","
           min={0}
           step={25}
           size="sm"
         />
-        <NumberInput
+        <NumberField
           label="Expected return"
           description="before fees"
-          value={Number((account.expectedReturn * 100).toFixed(2))}
-          onChange={(v) => onPatch({ expectedReturn: (typeof v === 'number' ? v : 0) / 100 })}
+          value={account.expectedReturn}
+          onSave={(expectedReturn) => onPatch({ expectedReturn })}
+          scale={100}
           suffix="%"
           min={0}
           max={15}
@@ -731,10 +730,11 @@ function AccountRow({
           decimalScale={2}
           size="sm"
         />
-        <NumberInput
+        <NumberField
           label="Annual fee"
-          value={Number(((account.annualFee ?? 0) * 100).toFixed(2))}
-          onChange={(v) => onPatch({ annualFee: (typeof v === 'number' ? v : 0) / 100 })}
+          value={account.annualFee ?? 0}
+          onSave={(annualFee) => onPatch({ annualFee })}
+          scale={100}
           suffix="%"
           min={0}
           max={5}
@@ -797,9 +797,9 @@ function ExpenseRow({
           </Text>
         )}
       </div>
-      <NumberInput
+      <NumberField
         value={expense.monthlyAmount}
-        onChange={(v) => onPatch({ monthlyAmount: typeof v === 'number' ? v : 0 })}
+        onSave={(monthlyAmount) => onPatch({ monthlyAmount })}
         prefix="$"
         thousandSeparator=","
         min={0}
@@ -841,28 +841,30 @@ function WindfallRow({
         <RemoveButton label={windfall.name} onRemove={onRemove} />
       </Group>
       <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="md">
-        <NumberInput
+        <NumberField
           label="Amount"
           value={windfall.amount}
-          onChange={(v) => onPatch({ amount: typeof v === 'number' ? v : 0 })}
+          onSave={(amount) => onPatch({ amount })}
           prefix="$"
           thousandSeparator=","
           min={0}
           step={5000}
           size="sm"
         />
-        <NumberInput
+        <NumberField
           label="Expected year"
           value={windfall.expectedYear}
-          onChange={(v) => onPatch({ expectedYear: typeof v === 'number' ? v : windfall.expectedYear })}
+          onSave={(expectedYear) => onPatch({ expectedYear })}
           min={2000}
           max={2100}
           size="sm"
         />
-        <NumberInput
+        <NumberField
           label="Confidence"
-          value={Math.round(windfall.confidence * 100)}
-          onChange={(v) => onPatch({ confidence: (typeof v === 'number' ? v : 0) / 100 })}
+          value={windfall.confidence}
+          onSave={(confidence) => onPatch({ confidence })}
+          scale={100}
+          displayDecimals={0}
           suffix="%"
           min={0}
           max={100}
@@ -906,20 +908,21 @@ function DebtRow({
         <RemoveButton label={debt.name} onRemove={onRemove} />
       </Group>
       <SimpleGrid cols={{ base: 1, sm: 4 }} spacing="md">
-        <NumberInput
+        <NumberField
           label="Balance"
           value={debt.balance}
-          onChange={(v) => onPatch({ balance: typeof v === 'number' ? v : 0 })}
+          onSave={(balance) => onPatch({ balance })}
           prefix="$"
           thousandSeparator=","
           min={0}
           step={1000}
           size="sm"
         />
-        <NumberInput
+        <NumberField
           label="APR"
-          value={Number((debt.apr * 100).toFixed(3))}
-          onChange={(v) => onPatch({ apr: (typeof v === 'number' ? v : 0) / 100 })}
+          value={debt.apr}
+          onSave={(apr) => onPatch({ apr })}
+          scale={100}
           suffix="%"
           min={0}
           max={30}
@@ -927,20 +930,20 @@ function DebtRow({
           decimalScale={3}
           size="sm"
         />
-        <NumberInput
+        <NumberField
           label="Payment (P&I)"
           value={debt.monthlyPayment}
-          onChange={(v) => onPatch({ monthlyPayment: typeof v === 'number' ? v : 0 })}
+          onSave={(monthlyPayment) => onPatch({ monthlyPayment })}
           prefix="$"
           thousandSeparator=","
           min={0}
           step={25}
           size="sm"
         />
-        <NumberInput
+        <NumberField
           label="Extra principal"
           value={debt.extraMonthlyPayment}
-          onChange={(v) => onPatch({ extraMonthlyPayment: typeof v === 'number' ? v : 0 })}
+          onSave={(extraMonthlyPayment) => onPatch({ extraMonthlyPayment })}
           prefix="$"
           thousandSeparator=","
           min={0}
