@@ -10,15 +10,19 @@ and the interesting part — taxes, debt payoffs falling off, college years, the
 pre-Medicare healthcare gap, RMDs forcing money out at 75 — is exactly the part it
 throws away.
 
+**Live demo:** [fiscal-compass.nineafterten.com](https://fiscal-compass.nineafterten.com),
+running the fictional sample household.
+
 > **Not financial advice.** Everything here is arithmetic applied to assumptions you
 > control. The rules of thumb are shown with their math so you can disagree with
 > them. Decisions about actual products belong with a licensed advisor.
 
 ## Privacy
 
-**Your data never leaves your browser.** No account, no server, no analytics, no
-network calls of any kind. Balances live in IndexedDB on the device you typed them
-into.
+**Your data never leaves your browser.** No account, no server, no network calls of
+any kind from the app. Balances live in IndexedDB on the device you typed them into.
+The hosted demo sits behind Cloudflare, whose Web Analytics beacon counts page views
+and load times for the whole domain, with no cookies and nothing you type.
 
 The repo ships with a fictional sample household (`src/data/profiles/sample.ts`) so
 it works the moment you clone it. Your real numbers go in
