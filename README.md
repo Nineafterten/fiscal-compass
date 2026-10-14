@@ -13,9 +13,40 @@ throws away.
 **Live demo:** [fiscal-compass.nineafterten.com](https://fiscal-compass.nineafterten.com),
 running the fictional sample household.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/dashboard-dark.webp">
+  <img src="docs/screenshots/dashboard-light.webp" alt="Fiscal Compass dashboard for the fictional Rivera household: earliest retirement at 56, plan succeeds in 100% of 1,000 simulated histories, and net worth over time stacked by tax treatment">
+</picture>
+
 > **Not financial advice.** Everything here is arithmetic applied to assumptions you
 > control. The rules of thumb are shown with their math so you can disagree with
 > them. Decisions about actual products belong with a licensed advisor.
+
+## Screens
+
+**Retirement readiness.** 1,000 simulated market histories, the earliest age that
+clears an 85% bar, and what each extra year of work buys.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/retirement-dark.webp">
+  <img src="docs/screenshots/retirement-light.webp" alt="Retirement readiness: a warning that averaging returns flatters the plan by six years, four result cards, and a curve of success probability by retirement age">
+</picture>
+
+**Insights.** Each finding shows the arithmetic it came from, starting with stress
+tests for specific bad decades.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/insights-dark.webp">
+  <img src="docs/screenshots/insights-light.webp" alt="Insights: a stress-test table where the sample plan survives a lost decade, a crash the year you retire, stagflation and a year out of work, with each ending balance and its change from baseline">
+</picture>
+
+**Scenarios.** Copy a plan, change one thing, and compare them against the same fixed
+random seed.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/scenarios-dark.webp">
+  <img src="docs/screenshots/scenarios-light.webp" alt="Scenarios: net worth by scenario over time and a comparison table of retirement age, success rate, savings rate, emergency fund and ending balance">
+</picture>
 
 ## Privacy
 
